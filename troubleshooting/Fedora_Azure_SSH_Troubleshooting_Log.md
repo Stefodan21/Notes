@@ -1,5 +1,23 @@
 *Consolidated technical record for future GitHub documentation*
 
+## Navigation Key
+
+| Section | Jump |
+|---|---|
+| 1. Problem Summary | [Go to section](#1-problem-summary) |
+| 2. Client and Network Environment | [Go to section](#2-client-and-network-environment) |
+| 3. Initial Error and Early Findings | [Go to section](#3-initial-error-and-early-findings) |
+| 4. Earlier Server and Authentication Checks | [Go to section](#4-earlier-server-and-authentication-checks) |
+| 5. Complete Command Log from the Final Investigation | [Go to section](#5-complete-command-log-from-the-final-investigation) |
+| 6. Additional TCP-Level Investigation | [Go to section](#6-additional-tcp-level-investigation) |
+| 7. Final Diagnosis | [Go to section](#7-final-diagnosis) |
+| 8. Lessons / Future Troubleshooting Notes | [Go to section](#8-lessons--future-troubleshooting-notes) |
+| 9. GitHub Publishing Notes | [Go to section](#9-github-publishing-notes) |
+| 10. Status | [Go to section](#10-status) |
+| 11. Consolidated Summary | [Go to section](#11-consolidated-summary) |
+
+Use the links above to jump straight to the section you need.
+
 # 1. Problem Summary
 
 The Fedora Linux installation could not establish a working SSH session
@@ -311,6 +329,19 @@ azureuser@20.127.14.122
 Result: SSH was allowed once connected through FIU_SECUREWiFi with the
 manual wireless and DNS configuration.
 
+## 5.22 Rebuild resolv.conf with public DNS servers
+
+sudo rm -f /etc/resolv.conf
+echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf
+
+Result: This appeared to be the working DNS workaround. Every time
+`wpa_supplicant` was used again, I had to reapply the IP/DNS setup or
+`dhclient wlo1` and the network startup flow would bring back FIU DNS
+instead of Cloudflare and Google. I also used the `131.94.186.0/24`
+range to capture the IP whenever it changed so I could keep track of the
+new address after reconnecting.
+
 ## 5.22 Manually force public DNS servers
 
 sudo rm -f /etc/resolv.conf
@@ -383,6 +414,10 @@ environment, not Fedora OpenSSH alone, was the key factor.
 - FIU_SECUREWiFi (WPA2-Enterprise) allowed SSH after Fedora was manually
   associated using wpa_supplicant and DNS was configured.
 
+- The earlier SSH banner exchange problem is now understood to have been
+  caused by school network filtering on the 10.110.x.x address range.
+  Once the network path changed, SSH handshakes were accepted again.
+
 - Fedora OpenSSH was not the root cause. GitHub SSH also failed from the
   affected environment, while independent SSH clients in Docker were
   used as comparisons. The decisive change came from switching WiFi
@@ -423,9 +458,56 @@ Azure subscription IDs, or other credentials.
 
 # 10. Status
 
-UNRESOLVED. The SSH problem was traced to the network environment rather
-than Fedora OpenSSH, but the DNS behavior still needs a permanent fix.
-FIU_WiFi blocked SSH, while FIU_SECUREWiFi permitted the connection
-after manual WPA2-Enterprise and DNS configuration. The manual DNS
-workaround helps temporarily, but `dhclient wlo1` restores FIU DNS after
-startup unless `/etc/resolv.conf` is deleted and recreated.
+RESOLVED. The SSH banner exchange issue was caused by the school network
+filtering on the 10.110.x.x range, not Fedora OpenSSH. The DNS/IP
+workaround is still documented above as the operational method that was
+needed to make the connection work, but the core SSH diagnosis is now
+considered resolved.
+
+# 11. Consolidated Summary
+
+This is a second, consolidated version of the investigation that groups the important findings together without repeating every command in the main log.
+
+## 11.1 High-level outcome
+
+- The SSH failure was not caused by Fedora OpenSSH.
+- The key issue was network filtering on the school 10.110.x.x range.
+- Switching to FIU_SECUREWiFi allowed SSH handshakes to complete again.
+- DNS also needed manual handling after wireless reauthentication.
+- The IP address changed frequently enough that I tracked it using the `131.94.186.0/24` range.
+
+## 11.2 Key facts in one table
+
+| Topic | Consolidated note |
+|---|---|
+| SSH banner failure | SSH reached the remote port, but banner exchange stalled while on the filtered school network. |
+| Root cause | School network filtering on the 10.110.x.x address range. |
+| Working network | FIU_SECUREWiFi, after manual `wpa_supplicant` setup. |
+| DNS workaround | Rebuild `/etc/resolv.conf` and point it at `8.8.8.8` and `1.1.1.1`. |
+| Why the DNS note matters | `wpa_supplicant` / `dhclient wlo1` could restore FIU DNS after reconnecting. |
+| IP tracking | The `131.94.186.0/24` range was used to notice and record the changing address. |
+| Final state | SSH diagnosis resolved; the DNS/IP handling process is still the practical workaround. |
+
+## 11.3 Cause-and-effect flow
+
+```mermaid
+flowchart TD
+  A[Attempt SSH to Azure VM] --> B{Network path}
+  B -->|FIU_WiFi| C[SSH stalls / banner exchange times out]
+  B -->|FIU_SECUREWiFi| D[SSH handshakes complete]
+  C --> E[School filtering on 10.110.x.x]
+  D --> F[Manual wpa_supplicant + DNS setup]
+  F --> G[Public DNS set to 8.8.8.8 and 1.1.1.1]
+  G --> H[Connection works until WiFi reconnect resets DNS]
+```
+
+## 11.4 Practical workaround notes
+
+- `wpa_supplicant` was used because NetworkManager was disabled for the client.
+- After reconnecting, `/etc/resolv.conf` had to be rebuilt manually.
+- Public DNS resolvers were used so name resolution would not fall back to FIU DNS.
+- If the IP changed, the `131.94.186.0/24` range helped track it.
+
+## 11.5 Bottom line
+
+The SSH problem is resolved from a troubleshooting standpoint because the blocking factor was the school network, not Fedora or OpenSSH. The detailed command log above remains the authoritative record, and this section is the consolidated recap of what mattered most.
