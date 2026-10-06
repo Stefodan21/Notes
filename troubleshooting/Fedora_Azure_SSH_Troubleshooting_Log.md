@@ -311,6 +311,18 @@ azureuser@20.127.14.122
 Result: SSH was allowed once connected through FIU_SECUREWiFi with the
 manual wireless and DNS configuration.
 
+## 5.22 Manually force public DNS servers
+
+sudo rm -f /etc/resolv.conf
+echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+echo "nameserver 1.1.1.1" | sudo tee -a /etc/resolv.conf
+
+Result: This appeared to work as a temporary DNS workaround. After
+switching back to `dhclient wlo1`, the issue returned and name resolution
+went back to FIU DNS instead of Cloudflare and Google. The DNS file has
+to be deleted and recreated after startup if I want the public resolvers
+to stay in place.
+
 # 6. Additional TCP-Level Investigation
 
 ## 6.1 Raw TCP connection
@@ -411,7 +423,9 @@ Azure subscription IDs, or other credentials.
 
 # 10. Status
 
-RESOLVED. The SSH problem was traced to the network environment rather
-than Fedora OpenSSH. FIU_WiFi blocked SSH, while FIU_SECUREWiFi
-permitted the connection after manual WPA2-Enterprise and DNS
-configuration.
+UNRESOLVED. The SSH problem was traced to the network environment rather
+than Fedora OpenSSH, but the DNS behavior still needs a permanent fix.
+FIU_WiFi blocked SSH, while FIU_SECUREWiFi permitted the connection
+after manual WPA2-Enterprise and DNS configuration. The manual DNS
+workaround helps temporarily, but `dhclient wlo1` restores FIU DNS after
+startup unless `/etc/resolv.conf` is deleted and recreated.
